@@ -9,8 +9,8 @@
 <meta name="theme-color" content="#0a0a0a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="application-name" content="番茄钟">
-<link id="pwa-manifest" rel="manifest">
-<link id="apple-touch-icon" rel="apple-touch-icon">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
 <title>番茄钟</title>
 <style>
 :root {
@@ -1392,118 +1392,17 @@ if (state.prefs.ambientOn) {
 initWakeLock();
 
 // ═══════════════════════════════════════
-// PWA — manifest + service worker (single-file, no external files needed)
+// PWA — register external service worker
 // ═══════════════════════════════════════
 (function initPWA() {
-
-  // ── 1. Generate app icon via canvas ──
-  function makeIcon(size) {
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
-    const ctx = c.getContext('2d');
-    // Background
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, size, size);
-    // Rounded rect clip
-    const r = size * 0.22;
-    ctx.beginPath();
-    ctx.moveTo(r, 0); ctx.lineTo(size-r, 0);
-    ctx.quadraticCurveTo(size, 0, size, r);
-    ctx.lineTo(size, size-r);
-    ctx.quadraticCurveTo(size, size, size-r, size);
-    ctx.lineTo(r, size); ctx.quadraticCurveTo(0, size, 0, size-r);
-    ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
-    ctx.closePath(); ctx.clip();
-    // Background fill again inside clip
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, size, size);
-    // Glow orb
-    const grd = ctx.createRadialGradient(size*0.35, size*0.35, 0, size*0.5, size*0.5, size*0.7);
-    grd.addColorStop(0, 'rgba(200,184,122,0.18)');
-    grd.addColorStop(1, 'rgba(200,184,122,0)');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, size, size);
-    // Tomato emoji or "番" character
-    ctx.fillStyle = '#c8b87a';
-    ctx.font = `italic ${size*0.48}px Georgia,serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('番', size/2, size*0.52);
-    return c.toDataURL('image/png');
-  }
-
-  const icon192 = makeIcon(192);
-  const icon512 = makeIcon(512);
-  const icon180 = makeIcon(180); // Apple touch icon
-
-  // ── 2. Inject Apple touch icon ──
-  document.getElementById('apple-touch-icon').href = icon180;
-
-  // ── 3. Build & inject manifest ──
-  const manifest = {
-    name: '番茄钟',
-    short_name: '番茄钟',
-    description: '专注计时 · 日程管理 · 环境音效',
-    start_url: './',
-    display: 'standalone',
-    orientation: 'any',
-    background_color: '#0a0a0a',
-    theme_color: '#0a0a0a',
-    lang: 'zh-CN',
-    icons: [
-      { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-      { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-    ]
-  };
-  const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
-  document.getElementById('pwa-manifest').href = URL.createObjectURL(manifestBlob);
-
-  // ── 4. Register Service Worker via Blob ──
-  const swCode = `
-const CACHE = 'pomodoro-v1';
-self.addEventListener('install', e => {
-  self.skipWaiting();
-});
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
-  );
-});
-self.addEventListener('fetch', e => {
-  // Cache-first for same-origin, network-only for others
-  if (!e.request.url.startsWith(self.location.origin)) return;
-  e.respondWith(
-    caches.open(CACHE).then(cache =>
-      cache.match(e.request).then(hit => {
-        if (hit) return hit;
-        return fetch(e.request).then(res => {
-          if (res && res.status === 200 && res.type === 'basic') {
-            cache.put(e.request, res.clone());
-          }
-          return res;
-        });
-      })
-    )
-  );
-});
-  `;
+  // ── Register external Service Worker ──
   if ('serviceWorker' in navigator) {
-    const swBlob = new Blob([swCode], { type: 'application/javascript' });
-    const swURL = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swURL, { scope: './' })
-      .then(reg => {
-        console.log('[PWA] Service Worker registered', reg.scope);
-      })
-      .catch(err => {
-        // Blob SW may fail on some browsers due to scope restrictions — that's OK,
-        // the app still works perfectly without it.
-        console.log('[PWA] SW registration skipped:', err.message);
-      });
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('[PWA] SW registered', reg.scope))
+      .catch(err => console.log('[PWA] SW failed:', err));
   }
 
-  // ── 5. iOS "Add to Home Screen" nudge (shown once) ──
+  // ── iOS "Add to Home Screen" nudge (shown once) ──
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone = ('standalone' in navigator && navigator.standalone) ||
                        window.matchMedia('(display-mode: standalone)').matches;
